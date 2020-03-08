@@ -1,0 +1,6 @@
+example/mountdir/*
+example/bbfs.log
+src/*.o
+src/bbfs
+src/bbfs.log
+
