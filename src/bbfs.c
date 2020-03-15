@@ -85,70 +85,6 @@ int bb_getattr(const char *path, struct stat *statbuf)
     return retstat;
 }
 
-/** Read the target of a symbolic link
- *
- * The buffer should be filled with a null terminated string.  The
- * buffer size argument includes the space for the terminating
- * null character.  If the linkname is too long to fit in the
- * buffer, it should be truncated.  The return value should be 0
- * for success.
- */
-// Note the system readlink() will truncate and lose the terminating
-// null.  So, the size passed to to the system readlink() must be one
-// less than the size passed to bb_readlink()
-// bb_readlink() code by Bernardo F Costa (thanks!)
-int bb_readlink(const char *path, char *link, size_t size)
-{
-    int retstat;
-    char fpath[PATH_MAX];
-    
-    log_msg("\nbb_readlink(path=\"%s\", link=\"%s\", size=%d)\n",
-	  path, link, size);
-    bb_fullpath(fpath, path);
-
-    retstat = log_syscall("readlink", readlink(fpath, link, size - 1), 0);
-    if (retstat >= 0) {
-	link[retstat] = '\0';
-	retstat = 0;
-	log_msg("    link=\"%s\"\n", link);
-    }
-    
-    return retstat;
-}
-
-/** Create a file node
- *
- * There is no create() operation, mknod() will be called for
- * creation of all non-directory, non-symlink nodes.
- */
-// shouldn't that comment be "if" there is no.... ?
-int bb_mknod(const char *path, mode_t mode, dev_t dev)
-{
-    int retstat;
-    char fpath[PATH_MAX];
-    
-    log_msg("\nbb_mknod(path=\"%s\", mode=0%3o, dev=%lld)\n",
-	  path, mode, dev);
-    bb_fullpath(fpath, path);
-    
-    // On Linux this could just be 'mknod(path, mode, dev)' but this
-    // tries to be be more portable by honoring the quote in the Linux
-    // mknod man page stating the only portable use of mknod() is to
-    // make a fifo, but saying it should never actually be used for
-    // that.
-    if (S_ISREG(mode)) {
-	retstat = log_syscall("open", open(fpath, O_CREAT | O_EXCL | O_WRONLY, mode), 0);
-	if (retstat >= 0)
-	    retstat = log_syscall("close", close(retstat), 0);
-    } else
-	if (S_ISFIFO(mode))
-	    retstat = log_syscall("mkfifo", mkfifo(fpath, mode), 0);
-	else
-	    retstat = log_syscall("mknod", mknod(fpath, mode, dev), 0);
-    
-    return retstat;
-}
-
 /** Create a directory */
 int bb_mkdir(const char *path, mode_t mode)
 {
@@ -184,23 +120,6 @@ int bb_rmdir(const char *path)
 
     return log_syscall("rmdir", rmdir(fpath), 0);
 }
-
-/** Create a symbolic link */
-// The parameters here are a little bit confusing, but do correspond
-// to the symlink() system call.  The 'path' is where the link points,
-// while the 'link' is the link itself.  So we need to leave the path
-// unaltered, but insert the link into the mounted directory.
-int bb_symlink(const char *path, const char *link)
-{
-    char flink[PATH_MAX];
-    
-    log_msg("\nbb_symlink(path=\"%s\", link=\"%s\")\n",
-	    path, link);
-    bb_fullpath(flink, link);
-
-    return log_syscall("symlink", symlink(path, flink), 0);
-}
-
 /** Rename a file */
 // both path and newpath are fs-relative
 int bb_rename(const char *path, const char *newpath)
@@ -215,70 +134,6 @@ int bb_rename(const char *path, const char *newpath)
 
     return log_syscall("rename", rename(fpath, fnewpath), 0);
 }
-
-/** Create a hard link to a file */
-int bb_link(const char *path, const char *newpath)
-{
-    char fpath[PATH_MAX], fnewpath[PATH_MAX];
-    
-    log_msg("\nbb_link(path=\"%s\", newpath=\"%s\")\n",
-	    path, newpath);
-    bb_fullpath(fpath, path);
-    bb_fullpath(fnewpath, newpath);
-
-    return log_syscall("link", link(fpath, fnewpath), 0);
-}
-
-/** Change the permission bits of a file */
-int bb_chmod(const char *path, mode_t mode)
-{
-    char fpath[PATH_MAX];
-    
-    log_msg("\nbb_chmod(fpath=\"%s\", mode=0%03o)\n",
-	    path, mode);
-    bb_fullpath(fpath, path);
-
-    return log_syscall("chmod", chmod(fpath, mode), 0);
-}
-
-/** Change the owner and group of a file */
-int bb_chown(const char *path, uid_t uid, gid_t gid)
-  
-{
-    char fpath[PATH_MAX];
-    
-    log_msg("\nbb_chown(path=\"%s\", uid=%d, gid=%d)\n",
-	    path, uid, gid);
-    bb_fullpath(fpath, path);
-
-    return log_syscall("chown", chown(fpath, uid, gid), 0);
-}
-
-/** Change the size of a file */
-int bb_truncate(const char *path, off_t newsize)
-{
-    char fpath[PATH_MAX];
-    
-    log_msg("\nbb_truncate(path=\"%s\", newsize=%lld)\n",
-	    path, newsize);
-    bb_fullpath(fpath, path);
-
-    return log_syscall("truncate", truncate(fpath, newsize), 0);
-}
-
-/** Change the access and/or modification times of a file */
-/* note -- I'll want to change this as soon as 2.6 is in debian testing */
-int bb_utime(const char *path, struct utimbuf *ubuf)
-{
-    char fpath[PATH_MAX];
-    
-    log_msg("\nbb_utime(path=\"%s\", ubuf=0x%08x)\n",
-	    path, ubuf);
-    bb_fullpath(fpath, path);
-
-    return log_syscall("utime", utime(fpath, ubuf), 0);
-}
-
 /** File open operation
  *
  * No creation, or truncation flags (O_CREAT, O_EXCL, O_TRUNC)
@@ -309,7 +164,15 @@ int bb_open(const char *path, struct fuse_file_info *fi)
     fi->fh = fd;
 
     log_fi(fi);
-    
+
+	//int res;
+
+	//res = open(fpath, fi->flags);
+	//if (res == -1)
+		//return -errno;
+
+	//fi->fh = res;
+
     return retstat;
 }
 
@@ -422,128 +285,6 @@ int bb_flush(const char *path, struct fuse_file_info *fi)
     return 0;
 }
 
-/** Release an open file
- *
- * Release is called when there are no more references to an open
- * file: all file descriptors are closed and all memory mappings
- * are unmapped.
- *
- * For every open() call there will be exactly one release() call
- * with the same flags and file descriptor.  It is possible to
- * have a file opened more than once, in which case only the last
- * release will mean, that no more reads/writes will happen on the
- * file.  The return value of release is ignored.
- *
- * Changed in version 2.2
- */
-int bb_release(const char *path, struct fuse_file_info *fi)
-{
-    log_msg("\nbb_release(path=\"%s\", fi=0x%08x)\n",
-	  path, fi);
-    log_fi(fi);
-
-    // We need to close the file.  Had we allocated any resources
-    // (buffers etc) we'd need to free them here as well.
-    return log_syscall("close", close(fi->fh), 0);
-}
-
-/** Synchronize file contents
- *
- * If the datasync parameter is non-zero, then only the user data
- * should be flushed, not the meta data.
- *
- * Changed in version 2.2
- */
-int bb_fsync(const char *path, int datasync, struct fuse_file_info *fi)
-{
-    log_msg("\nbb_fsync(path=\"%s\", datasync=%d, fi=0x%08x)\n",
-	    path, datasync, fi);
-    log_fi(fi);
-    
-    // some unix-like systems (notably freebsd) don't have a datasync call
-#ifdef HAVE_FDATASYNC
-    if (datasync)
-	return log_syscall("fdatasync", fdatasync(fi->fh), 0);
-    else
-#endif	
-	return log_syscall("fsync", fsync(fi->fh), 0);
-}
-
-#ifdef HAVE_SYS_XATTR_H
-/** Note that my implementations of the various xattr functions use
-    the 'l-' versions of the functions (eg bb_setxattr() calls
-    lsetxattr() not setxattr(), etc).  This is because it appears any
-    symbolic links are resolved before the actual call takes place, so
-    I only need to use the system-provided calls that don't follow
-    them */
-
-/** Set extended attributes */
-int bb_setxattr(const char *path, const char *name, const char *value, size_t size, int flags)
-{
-    char fpath[PATH_MAX];
-    
-    log_msg("\nbb_setxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d, flags=0x%08x)\n",
-	    path, name, value, size, flags);
-    bb_fullpath(fpath, path);
-
-    return log_syscall("lsetxattr", lsetxattr(fpath, name, value, size, flags), 0);
-}
-
-/** Get extended attributes */
-int bb_getxattr(const char *path, const char *name, char *value, size_t size)
-{
-    int retstat = 0;
-    char fpath[PATH_MAX];
-    
-    log_msg("\nbb_getxattr(path = \"%s\", name = \"%s\", value = 0x%08x, size = %d)\n",
-	    path, name, value, size);
-    bb_fullpath(fpath, path);
-
-    retstat = log_syscall("lgetxattr", lgetxattr(fpath, name, value, size), 0);
-    if (retstat >= 0)
-	log_msg("    value = \"%s\"\n", value);
-    
-    return retstat;
-}
-
-/** List extended attributes */
-int bb_listxattr(const char *path, char *list, size_t size)
-{
-    int retstat = 0;
-    char fpath[PATH_MAX];
-    char *ptr;
-    
-    log_msg("\nbb_listxattr(path=\"%s\", list=0x%08x, size=%d)\n",
-	    path, list, size
-	    );
-    bb_fullpath(fpath, path);
-
-    retstat = log_syscall("llistxattr", llistxattr(fpath, list, size), 0);
-    if (retstat >= 0) {
-	log_msg("    returned attributes (length %d):\n", retstat);
-	if (list != NULL)
-	    for (ptr = list; ptr < list + retstat; ptr += strlen(ptr)+1)
-		log_msg("    \"%s\"\n", ptr);
-	else
-	    log_msg("    (null)\n");
-    }
-    
-    return retstat;
-}
-
-/** Remove extended attributes */
-int bb_removexattr(const char *path, const char *name)
-{
-    char fpath[PATH_MAX];
-    
-    log_msg("\nbb_removexattr(path=\"%s\", name=\"%s\")\n",
-	    path, name);
-    bb_fullpath(fpath, path);
-
-    return log_syscall("lremovexattr", lremovexattr(fpath, name), 0);
-}
-#endif
-
 /** Open directory
  *
  * This method should check if the open operation is permitted for
@@ -637,43 +378,6 @@ int bb_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset
     return retstat;
 }
 
-/** Release directory
- *
- * Introduced in version 2.3
- */
-int bb_releasedir(const char *path, struct fuse_file_info *fi)
-{
-    int retstat = 0;
-    
-    log_msg("\nbb_releasedir(path=\"%s\", fi=0x%08x)\n",
-	    path, fi);
-    log_fi(fi);
-    
-    closedir((DIR *) (uintptr_t) fi->fh);
-    
-    return retstat;
-}
-
-/** Synchronize directory contents
- *
- * If the datasync parameter is non-zero, then only the user data
- * should be flushed, not the meta data
- *
- * Introduced in version 2.3
- */
-// when exactly is this called?  when a user calls fsync and it
-// happens to be a directory? ??? >>> I need to implement this...
-int bb_fsyncdir(const char *path, int datasync, struct fuse_file_info *fi)
-{
-    int retstat = 0;
-    
-    log_msg("\nbb_fsyncdir(path=\"%s\", datasync=%d, fi=0x%08x)\n",
-	    path, datasync, fi);
-    log_fi(fi);
-    
-    return retstat;
-}
-
 /**
  * Initialize filesystem
  *
@@ -713,153 +417,21 @@ void bb_destroy(void *userdata)
     log_msg("\nbb_destroy(userdata=0x%08x)\n", userdata);
 }
 
-/**
- * Check file access permissions
- *
- * This will be called for the access() system call.  If the
- * 'default_permissions' mount option is given, this method is not
- * called.
- *
- * This method is not called under Linux kernel versions 2.4.x
- *
- * Introduced in version 2.5
- */
-int bb_access(const char *path, int mask)
-{
-    int retstat = 0;
-    char fpath[PATH_MAX];
-   
-    log_msg("\nbb_access(path=\"%s\", mask=0%o)\n",
-	    path, mask);
-    bb_fullpath(fpath, path);
-    
-    retstat = access(fpath, mask);
-    
-    if (retstat < 0)
-	retstat = log_error("bb_access access");
-    
-    return retstat;
-}
-
-/**
- * Create and open a file
- *
- * If the file does not exist, first create it with the specified
- * mode, and then open it.
- *
- * If this method is not implemented or under Linux kernel
- * versions earlier than 2.6.15, the mknod() and open() methods
- * will be called instead.
- *
- * Introduced in version 2.5
- */
-// Not implemented.  I had a version that used creat() to create and
-// open the file, which it turned out opened the file write-only.
-
-/**
- * Change the size of an open file
- *
- * This method is called instead of the truncate() method if the
- * truncation was invoked from an ftruncate() system call.
- *
- * If this method is not implemented or under Linux kernel
- * versions earlier than 2.6.15, the truncate() method will be
- * called instead.
- *
- * Introduced in version 2.5
- */
-int bb_ftruncate(const char *path, off_t offset, struct fuse_file_info *fi)
-{
-    int retstat = 0;
-    
-    log_msg("\nbb_ftruncate(path=\"%s\", offset=%lld, fi=0x%08x)\n",
-	    path, offset, fi);
-    log_fi(fi);
-    
-    retstat = ftruncate(fi->fh, offset);
-    if (retstat < 0)
-	retstat = log_error("bb_ftruncate ftruncate");
-    
-    return retstat;
-}
-
-/**
- * Get attributes from an open file
- *
- * This method is called instead of the getattr() method if the
- * file information is available.
- *
- * Currently this is only called after the create() method if that
- * is implemented (see above).  Later it may be called for
- * invocations of fstat() too.
- *
- * Introduced in version 2.5
- */
-int bb_fgetattr(const char *path, struct stat *statbuf, struct fuse_file_info *fi)
-{
-    int retstat = 0;
-    
-    log_msg("\nbb_fgetattr(path=\"%s\", statbuf=0x%08x, fi=0x%08x)\n",
-	    path, statbuf, fi);
-    log_fi(fi);
-
-    // On FreeBSD, trying to do anything with the mountpoint ends up
-    // opening it, and then using the FD for an fgetattr.  So in the
-    // special case of a path of "/", I need to do a getattr on the
-    // underlying root directory instead of doing the fgetattr().
-    if (!strcmp(path, "/"))
-	return bb_getattr(path, statbuf);
-    
-    retstat = fstat(fi->fh, statbuf);
-    if (retstat < 0)
-	retstat = log_error("bb_fgetattr fstat");
-    
-    log_stat(statbuf);
-    
-    return retstat;
-}
-
 struct fuse_operations bb_oper = {
   .getattr = bb_getattr,
-  .readlink = bb_readlink,
-  // no .getdir -- that's deprecated
-  .getdir = NULL,
-  .mknod = bb_mknod,
   .mkdir = bb_mkdir,
   .unlink = bb_unlink,
   .rmdir = bb_rmdir,
-  .symlink = bb_symlink,
   .rename = bb_rename,
-  .link = bb_link,
-  .chmod = bb_chmod,
-  .chown = bb_chown,
-  .truncate = bb_truncate,
-  .utime = bb_utime,
   .open = bb_open,
   .read = bb_read,
   .write = bb_write,
-  /** Just a placeholder, don't set */ // huh???
   .statfs = bb_statfs,
   .flush = bb_flush,
-  .release = bb_release,
-  .fsync = bb_fsync,
-  
-#ifdef HAVE_SYS_XATTR_H
-  .setxattr = bb_setxattr,
-  .getxattr = bb_getxattr,
-  .listxattr = bb_listxattr,
-  .removexattr = bb_removexattr,
-#endif
-  
   .opendir = bb_opendir,
   .readdir = bb_readdir,
-  .releasedir = bb_releasedir,
-  .fsyncdir = bb_fsyncdir,
   .init = bb_init,
   .destroy = bb_destroy,
-  .access = bb_access,
-  .ftruncate = bb_ftruncate,
-  .fgetattr = bb_fgetattr
 };
 
 void bb_usage()
