@@ -472,8 +472,8 @@ int main(int argc, char *argv[])
 
     bb_data = malloc(sizeof(struct bb_state));
     if (bb_data == NULL) {
-	perror("main calloc");
-	abort();
+        perror("main calloc");
+        abort();
     }
 
     // Pull the rootdir out of the argument list and save it in my
